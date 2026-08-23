@@ -2,11 +2,17 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from Agents import (build_search_agent,build_reader_agent,writer_chain,critic_chain,)
+from Agents import (
+    build_search_agent,
+    build_reader_agent,
+    writer_chain,
+    critic_chain,
+)
 
 
 # FastAPI app setup
@@ -24,6 +30,17 @@ app = FastAPI(
 # React/Vite creates the production build inside frontend/dist
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+
+
+# CORS setup
+# Allow frontend and API communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Request model
@@ -230,6 +247,16 @@ REJECTED SOURCES
 
 
 # API health check
+@app.get("/api/health")
+def health():
+
+    return {
+        "message": "Multi-Agent AI Researcher API is running",
+        "status": "healthy",
+    }
+
+
+# Serve React application
 @app.get("/")
 def root():
 
@@ -311,6 +338,15 @@ if FRONTEND_DIST.exists():
     @app.get("/{full_path:path}")
     def serve_frontend(full_path: str):
 
+        # Do not intercept API routes
+        if full_path.startswith("api/"):
+
+            raise HTTPException(
+                status_code=404,
+                detail="API endpoint not found.",
+            )
+
+
         # Requested frontend file
         requested_file = FRONTEND_DIST / full_path
 
@@ -332,11 +368,18 @@ if FRONTEND_DIST.exists():
 # RUN
 if __name__ == "__main__":
 
+    import os
     import uvicorn
+
+    # Use Render's PORT in production
+    # Fall back to 8000 for local development
+    port = int(
+        os.environ.get("PORT", 8000)
+    )
 
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True,
+        port=port,
+        reload=False,
     )
