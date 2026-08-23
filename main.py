@@ -1,10 +1,12 @@
 from datetime import date
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from Agents import (build_search_agent,build_reader_agent,writer_chain,critic_chain)
+from Agents import (build_search_agent,build_reader_agent,writer_chain,critic_chain,)
 
 
 # FastAPI app setup
@@ -14,19 +16,14 @@ app = FastAPI(
         "Multi-agent AI system for web research, "
         "source verification and report generation."
     ),
-    version="1.0.0"
+    version="1.0.0",
 )
 
 
-# CORS setup
-# Allow React frontend to communicate with FastAPI backend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Frontend build directory
+# React/Vite creates the production build inside frontend/dist
+BASE_DIR = Path(__file__).resolve().parent
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
 
 # Request model
@@ -207,7 +204,7 @@ REJECTED SOURCES
     state["report"] = writer_chain.invoke({
         "topic": topic,
         "current_date": current_date,
-        "research": research_combined
+        "research": research_combined,
     })
 
     print("\nFINAL REPORT:\n")
@@ -221,7 +218,7 @@ REJECTED SOURCES
     print("=" * 50)
 
     state["feedback"] = critic_chain.invoke({
-        "report": state["report"]
+        "report": state["report"],
     })
 
     print("\nCRITIC REPORT:\n")
@@ -236,14 +233,24 @@ REJECTED SOURCES
 @app.get("/")
 def root():
 
+    # Serve React application in production
+    if FRONTEND_DIST.exists():
+
+        return FileResponse(
+            FRONTEND_DIST / "index.html"
+        )
+
     return {
         "message": "Multi-Agent AI Researcher API is running",
-        "status": "healthy"
+        "status": "healthy",
     }
 
 
 # Research API endpoint
-@app.post("/api/research", response_model=ResearchResponse)
+@app.post(
+    "/api/research",
+    response_model=ResearchResponse,
+)
 def research(request: ResearchRequest):
 
     # Validate topic
@@ -253,7 +260,7 @@ def research(request: ResearchRequest):
 
         raise HTTPException(
             status_code=400,
-            detail="Research topic cannot be empty."
+            detail="Research topic cannot be empty.",
         )
 
 
@@ -269,7 +276,7 @@ def research(request: ResearchRequest):
             report=result["report"],
             feedback=result["feedback"],
             search_results=result["search_results"],
-            scraped_content=result["scraped_content"]
+            scraped_content=result["scraped_content"],
         )
 
 
@@ -282,7 +289,43 @@ def research(request: ResearchRequest):
         # Return API error
         raise HTTPException(
             status_code=500,
-            detail=f"Research pipeline failed: {str(e)}"
+            detail=f"Research pipeline failed: {str(e)}",
+        )
+
+
+# Serve React static assets
+# This route is used only when the frontend has been built
+if FRONTEND_DIST.exists():
+
+    # Serve Vite generated assets
+    app.mount(
+        "/assets",
+        StaticFiles(
+            directory=FRONTEND_DIST / "assets"
+        ),
+        name="assets",
+    )
+
+
+    # Serve React application routes
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str):
+
+        # Requested frontend file
+        requested_file = FRONTEND_DIST / full_path
+
+
+        # Serve the file if it exists
+        if requested_file.is_file():
+
+            return FileResponse(
+                requested_file
+            )
+
+
+        # React handles client-side routes
+        return FileResponse(
+            FRONTEND_DIST / "index.html"
         )
 
 
@@ -295,5 +338,5 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=True,
     )

@@ -150,8 +150,7 @@ function App() {
     try {
 
       // Send research request to FastAPI backend
-      const response = await fetch(
-        "http://localhost:8000/api/research",
+      const response = await fetch("/api/research",
         {
           method: "POST",
 
