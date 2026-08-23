@@ -1,11 +1,43 @@
 from datetime import date
 
-from Agents import (
-    build_search_agent,
-    build_reader_agent,
-    writer_chain,
-    critic_chain
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from Agents import (build_search_agent,build_reader_agent,writer_chain,critic_chain)
+
+
+# FastAPI app setup
+app = FastAPI(
+    title="Multi-Agent AI Researcher",
+    description="Multi-agent AI system for web research, source verification and report generation.",
+    version="1.0.0"
 )
+
+
+# CORS setup
+# Allow React frontend to communicate with FastAPI backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Request model
+class ResearchRequest(BaseModel):
+    topic: str
+
+
+# Response model
+class ResearchResponse(BaseModel):
+    topic: str
+    report: str
+    feedback: str
+    search_results: str
+    scraped_content: str
 
 
 def run_research_pipeline(topic: str) -> dict:
@@ -164,9 +196,59 @@ Do not treat an unverified search summary as a confirmed fact.
     return state
 
 
+# API health check
+@app.get("/")
+def root():
+
+    return {
+        "message": "Multi-Agent AI Researcher API is running",
+        "status": "healthy"
+    }
+
+
+# Research API endpoint
+@app.post("/api/research", response_model=ResearchResponse)
+def research(request: ResearchRequest):
+
+    # Validate topic
+    topic = request.topic.strip()
+
+    if not topic:
+        raise HTTPException(
+            status_code=400,
+            detail="Research topic cannot be empty."
+        )
+
+    try:
+
+        # Run research pipeline
+        result = run_research_pipeline(topic)
+
+        # Return research result
+        return ResearchResponse(
+            topic=topic,
+            report=result["report"],
+            feedback=result["feedback"],
+            search_results=result["search_results"],
+            scraped_content=result["scraped_content"]
+        )
+
+    except Exception as e:
+
+        print(f"\nERROR: {str(e)}")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Research pipeline failed: {str(e)}"
+        )
+
+
 # RUN
 if __name__ == "__main__":
-
-    topic = input("\nEnter the research topic: ")
-
-    result = run_research_pipeline(topic)
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
