@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 
 from langchain.agents import create_agent
-from langchain_mistralai import ChatMistralAI
+from langchain_openrouter import ChatOpenRouter
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -13,11 +13,18 @@ from tools import search, web_scrap
 load_dotenv()
 
 
-# model setup
-llm = ChatMistralAI(model="mistral-small-2603",temperature=0)
+# MODEL SETUP
+llm = ChatOpenRouter(
+    model=os.environ.get(
+        "MODEL_NAME",
+        "qwen/qwen3.5-27b",
+    ),
+    temperature=0,
+    max_tokens=4096,
+)
 
 
-# Frist Agent
+# SEARCH AGENT
 def build_search_agent():
     return create_agent(
         model=llm,
@@ -32,18 +39,12 @@ IMPORTANT DATE RULES:
 
 - The current date will be provided in the user's request.
 - Never assume a fixed year.
-- When the user asks for "recent", "latest", "new", "today",
-  "this week", "this month", or similar terms, prioritize
+- When the user asks for recent, latest, new, today,
+  this week, this month, or similar terms, prioritize
   the newest available information relative to the current date.
-- Prefer sources published within the last few weeks or months
-  when recent information is required.
+- Prefer recent reliable sources.
 - Always inspect publication dates when available.
-- Do not treat an old source as recent when newer reliable
-  information exists.
-- Older sources may be used for background when necessary.
-- Never change or invent a publication date.
-- If the publication date cannot be determined, write:
-  Date: Not available
+- Never invent publication dates.
 
 IMPORTANT SOURCE QUALITY RULES:
 
@@ -57,90 +58,63 @@ Prefer sources in this order:
 6. Established industry publications
 7. Reliable secondary sources
 
-Examples of useful primary sources include:
-
-- Official company announcements
-- Official research papers
-- University announcements
-- Government reports
-- Official project documentation
-- Official organization websites
-
 IMPORTANT URL RULES:
 
-- The URL must point directly to the specific article,
-  paper or webpage containing the information.
-- Do NOT return generic homepages.
-- Do NOT return category pages.
-- Do NOT return search pages.
-- Do NOT return tag pages.
-- Do NOT return generic news landing pages when a direct
-  article URL is available.
-- Do NOT replace a specific article URL with a homepage URL.
-- The URL must actually correspond to the information
-  summarized.
+- Return direct article, paper or webpage URLs.
+- Do not return generic homepages.
+- Do not return category pages.
+- Do not return search pages.
+- Do not return tag pages.
 - Never invent URLs.
 - Only use URLs returned by the search tool.
 
 IMPORTANT CLAIM RULES:
 
-- Do not rely on a headline alone.
+- Do not rely on headlines alone.
 - Do not turn speculation into fact.
-- Pay attention to words such as:
-  "may", "could", "expected", "planned", "proposed",
-  "researchers suggest", "according to", and "potential".
-- Preserve the meaning and certainty level of the original source.
-- If a source makes a strong claim without supporting evidence,
-  do not strengthen that claim in your summary.
+- Preserve the certainty level of the source.
 - Prefer multiple independent sources for important claims.
 
-Use the search tool to find multiple sources.
+IMPORTANT SEARCH QUERY RULES:
 
-After searching, return the sources in this format:
+- Search queries must contain actual topic keywords.
+- Never create a query consisting only of site: operators.
+- If using site: filters, include the actual research topic.
+
+Use the search tool.
+
+Find at least 3 relevant sources when possible.
+
+Return sources using:
 
 SOURCE 1
 Title: <title>
-URL: <direct article or paper URL>
+URL: <direct URL>
 Summary: <short factual summary>
-Date: <publication date if available>
+Date: <publication date or Not available>
 Source Type: <Primary / Research / News / Industry / Secondary>
 
 SOURCE 2
 Title: <title>
-URL: <direct article or paper URL>
+URL: <direct URL>
 Summary: <short factual summary>
-Date: <publication date if available>
+Date: <publication date or Not available>
 Source Type: <Primary / Research / News / Industry / Secondary>
 
 SOURCE 3
 Title: <title>
-URL: <direct article or paper URL>
+URL: <direct URL>
 Summary: <short factual summary>
-Date: <publication date if available>
+Date: <publication date or Not available>
 Source Type: <Primary / Research / News / Industry / Secondary>
 
-Rules:
-
-- Find at least 3 relevant sources when possible.
-- Prefer multiple independent sources.
-- Prefer primary sources when available.
-- Prefer recent sources when the topic requires recent information.
-- For scientific or technical topics, prefer original papers,
-  universities, research institutions and official technical
-  announcements.
-- For news topics, prefer reputable journalism and primary
-  announcements.
-- Do not use low-quality sources when stronger sources are available.
-- Do not invent URLs.
-- Only use URLs returned by the search tool.
-- Keep summaries concise and factual.
+Keep summaries concise.
 """
     )
 
 
-# second Agent
+# READER AGENT
 def build_reader_agent():
-
     return create_agent(
         model=llm,
         tools=[web_scrap],
@@ -153,314 +127,303 @@ and independently verify the claims reported by the Search Agent.
 For each selected URL:
 
 1. Call the web_scrap tool.
-2. Read the returned webpage content.
-3. Confirm that the webpage is the expected article, paper
-   or source.
-4. Verify that the webpage actually supports the Search Agent's
-   summary.
+2. Read the webpage content.
+3. Confirm the webpage is the expected source.
+4. Verify important claims from the Search Agent.
 5. Extract facts directly relevant to the research topic.
-6. Identify important findings.
-7. Check the actual publication date when available.
-8. Check important numbers, names, dates and technical details.
-9. Ignore navigation, advertisements and unrelated content.
-10. Never invent facts.
-11. Never create or modify URLs.
-12. Prefer primary information contained within the webpage.
-13. Preserve the certainty level of the original source.
+6. Check publication dates when available.
+7. Check important numbers, names, dates and technical details.
+8. Never invent facts.
+9. Never modify URLs.
+10. Preserve the certainty of the original source.
 
 SOURCE VERIFICATION:
 
-Mark the source:
-
 VERIFIED
-    When the webpage directly supports the important claims.
+- The webpage directly supports the important claims.
 
 PARTIALLY VERIFIED
-    When the webpage supports some claims but not all.
+- The webpage supports some claims but not all.
 
 REJECTED
-    When the webpage cannot be accessed, does not contain
-    the claimed information, is a generic page, or the
-    important claims cannot be verified.
+- The webpage cannot be accessed or does not support
+  the important claims.
 
 IMPORTANT:
 
 - Never treat a search-result summary as verified evidence.
-- Never treat a headline as proof of the complete claim.
-- Never assume a publication date from the search result.
-- Use the date shown on the actual webpage when available.
-- If the date cannot be verified, write:
+- Never treat a headline as proof.
+- If a date cannot be verified, write:
   Date: Not verified
 - If a number cannot be verified, do not include it as fact.
-- If a claim is described as possible, expected or proposed,
-  preserve that uncertainty.
 - Do not upgrade "may" into "will".
-- Do not upgrade "research suggests" into "research proves".
+- Do not upgrade "expected" into "confirmed".
 - Do not upgrade "planned" into "completed".
 
-For scientific and technical claims:
+NUMERICAL AND LOGICAL CONSISTENCY:
 
-- Identify the actual research institution, company,
-  paper or experiment when available.
-- Include important measurable results when verified.
-- Avoid exaggerated conclusions.
-- Distinguish experimental results from future expectations.
+- Check important numerical claims.
+- Check scores, totals, percentages, rankings and dates.
+- For sports results, verify that the scores match the
+  stated winning margin.
+- If a source appears internally inconsistent, flag it.
+- Never silently invent a corrected value.
 
-Return the results using this structure:
+Return:
 
 SOURCE:
-Title: <title>
-URL: <url>
-Verification: VERIFIED / PARTIALLY VERIFIED / REJECTED
-Actual Date: <verified publication date or Not verified>
-Source Type: <Primary / Research / News / Industry / Secondary>
+Title:
+URL:
+Verification:
+Actual Date:
+Source Type:
 
 IMPORTANT FINDINGS:
-- finding 1
-- finding 2
-- finding 3
+- ...
 
 VERIFIED FACTS:
-- fact 1
-- fact 2
-- fact 3
+- ...
 
 CLAIMS NOT VERIFIED:
-- claim 1
-- claim 2
+- ...
 
 VERIFICATION NOTES:
-- Explain briefly why the source was verified,
-  partially verified or rejected.
+- ...
 
-Repeat this for every selected source.
-
-At the end provide:
+Then provide:
 
 VERIFIED SOURCES:
-- source 1
-- source 2
+- ...
 
 PARTIALLY VERIFIED SOURCES:
-- source 1
+- ...
 
 REJECTED SOURCES:
-- source 1
+- ...
 """
     )
 
 
-# prompt
+# WRITER
 writer_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
         """
-        You are an expert research writer.
+You are an expert research writer.
 
-        Write clear, structured, factual and insightful research reports.
+Write clear, structured, factual and insightful research reports.
 
-        IMPORTANT SOURCE RULES:
+EVIDENCE PRIORITY:
 
-        - Use VERIFIED facts as the primary evidence.
-        - PARTIALLY VERIFIED sources may only be used for
-          the claims that were actually verified.
-        - Do not use REJECTED sources as evidence.
-        - Do not invent facts.
-        - Do not invent sources.
-        - Do not invent URLs.
-        - Do not invent publication dates.
-        - Prefer primary and high-quality sources.
-        - Prefer recent information when the topic requires it.
+The VERIFIED RESEARCH section is authoritative.
 
-        IMPORTANT CLAIM RULES:
+Search-result summaries are preliminary information only.
 
-        Preserve the certainty of the original evidence.
+If SEARCH RESULTS and VERIFIED RESEARCH conflict:
 
-        Never change:
+- Trust VERIFIED RESEARCH.
+- Do not use the conflicting search-result claim.
+- Do not use REJECTED sources as evidence.
 
-        "may" → "will"
-        "could" → "will"
-        "expected" → "confirmed"
-        "planned" → "completed"
-        "research suggests" → "research proves"
-        "potential" → "actual"
+SOURCE RULES:
 
-        Do not make unsupported statements about:
-        - public excitement
-        - market impact
-        - industry adoption
-        - commercial success
-        - future outcomes
+- Use VERIFIED facts as the primary evidence.
+- PARTIALLY VERIFIED sources may only be used
+  for claims actually verified.
+- Do not invent facts.
+- Do not invent sources.
+- Do not invent URLs.
+- Do not invent publication dates.
+- Prefer primary and high-quality sources.
 
-        unless the research explicitly supports them.
+CLAIM RULES:
 
-        Clearly distinguish:
+Preserve the certainty of the original evidence.
 
-        FACT
-        - directly supported by the source.
+Never change:
 
-        INTERPRETATION
-        - reasonable analysis based on verified facts.
+"may" → "will"
+"could" → "will"
+"expected" → "confirmed"
+"planned" → "completed"
+"research suggests" → "research proves"
+"potential" → "actual"
 
-        FUTURE EXPECTATION
-        - explicitly described by the source as future,
-          planned or expected.
+Clearly distinguish:
 
-        If an important claim cannot be verified,
-        either remove it or clearly label it as unverified.
+FACT
+- directly supported by the source.
 
-        For technical and scientific topics:
+INTERPRETATION
+- reasonable analysis based on verified facts.
 
-        - Explain what was actually demonstrated.
-        - Include measurable results when available.
-        - Avoid exaggerated statements such as
-          "revolutionary" or "game-changing" unless directly
-          supported by the evidence.
-        - Explain limitations when relevant.
-        """
+FUTURE EXPECTATION
+- explicitly described as future, planned or expected.
+
+If an important claim cannot be verified,
+remove it or clearly label it as unverified.
+
+Do not exaggerate scientific or technical results.
+"""
     ),
     (
         "human",
         """
-        Write a detailed research report about:
+Write a detailed research report about:
 
-        Topic:
-        {topic}
+Topic:
+{topic}
 
-        Current Date:
-        {current_date}
+Current Date:
+{current_date}
 
-        Research Gathered:
-        {research}
+Research Gathered:
+{research}
 
-        Structure:
+The VERIFIED RESEARCH section has higher priority than
+SEARCH RESULTS.
 
-        # Introduction
+Do not repeat a claim from SEARCH RESULTS if VERIFIED RESEARCH
+contradicts it.
 
-        Briefly explain the topic and what the latest research
-        or developments indicate.
+Structure:
 
-        # Key Findings
+# Introduction
 
-        Provide at least 3 well-explained findings.
+Briefly explain the topic and the latest verified developments.
 
-        For each finding:
+# Key Findings
 
-        ### Finding Title
+Provide at least 3 well-explained findings.
 
-        Explain the verified development.
+For each finding:
 
-        Include:
-        - What happened
-        - When it happened
-        - Who was involved
-        - Important technical or factual details
-        - Why it matters
+### Finding Title
 
-        Clearly separate verified facts from interpretation.
+Explain the verified development.
 
-        # Limitations and Uncertainties
+Include:
+- What happened
+- When it happened
+- Who was involved
+- Important factual details
+- Why it matters
 
-        Mention important claims that could not be fully verified,
-        conflicting information, or limitations in the available
-        sources.
+Clearly separate facts from interpretation.
 
-        If there are no meaningful limitations, briefly state that.
+# Limitations and Uncertainties
 
-        # Conclusion
+Mention important claims that could not be fully verified,
+conflicting information, or source limitations.
 
-        Summarize the strongest verified findings without
-        exaggerating their significance.
+# Conclusion
 
-        # Sources
+Summarize the strongest verified findings without exaggeration.
 
-        List only VERIFIED or PARTIALLY VERIFIED sources that
-        actually support claims used in the report.
+# Sources
 
-        Include:
+List only VERIFIED or PARTIALLY VERIFIED sources that support
+claims used in the report.
 
-        1. Source title
-        2. URL
-        3. Publication date when verified
+Include:
+1. Source title
+2. URL
+3. Publication date when verified
 
-        Be detailed, factual and professional.
-
-        Do not cite rejected sources as evidence.
-        """
+Do not cite rejected sources.
+"""
     )
 ])
 
-
-# Writer Chain
 writer_chain = writer_prompt | llm | StrOutputParser()
 
 
-# critic prompt
+# CRITIC
 critic_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
         """
-        You are a sharp and rigorous research critic.
+You are a strict research report quality reviewer.
 
-        Evaluate the research report for:
+Your ONLY task is to review a research report against the
+VERIFIED RESEARCH provided by the user.
 
-        - factual accuracy
-        - source quality
-        - source verification
-        - source recency
-        - source diversity
-        - completeness
-        - clarity
-        - relevance
-        - unsupported claims
-        - exaggerated claims
-        - certainty preservation
-        - depth of analysis
-        - technical accuracy
-        - distinction between fact and interpretation
+Do NOT perform web searches.
+Do NOT use external knowledge.
+Do NOT discuss user safety or moderation.
+Do NOT summarize the research.
+Do NOT rewrite the report.
 
-        Pay special attention to whether the writer has:
+Check only:
 
-        - turned "may" into "will"
-        - turned "expected" into "confirmed"
-        - turned "planned" into "completed"
-        - treated secondary reporting as primary evidence
-        - presented unverified numbers as facts
-        - exaggerated scientific or technical results
-        - used old sources for a recent-news question
-        - relied too heavily on one publication
-        """
+1. Factual accuracy
+2. Whether claims are supported by VERIFIED RESEARCH
+3. Names, dates and numbers
+4. Numerical consistency
+5. Source quality and verification
+6. Source recency
+7. Missing important verified information
+8. Unsupported or exaggerated claims
+9. Whether certainty was preserved
+10. Fact vs interpretation
+
+Important rules:
+
+- VERIFIED RESEARCH is the only evidence.
+- Do not treat SEARCH RESULTS as evidence.
+- Do not invent corrections.
+- Do not introduce facts from outside knowledge.
+- If something is not supported by VERIFIED RESEARCH,
+  mark it as unsupported.
+- If there are no factual problems, explicitly say:
+  "None identified."
+
+Return ONLY this format:
+
+Score: X/10
+
+Strengths:
+- ...
+- ...
+- ...
+
+Factual Issues:
+- ...
+- ...
+- ...
+
+Areas to Improve:
+- ...
+- ...
+- ...
+
+One line verdict:
+...
+"""
     ),
     (
         "human",
         """
-        Review the research report below.
+VERIFIED RESEARCH:
 
-        Report:
-        {report}
+{research}
 
-        Respond in exactly this format:
 
-        Score: X/10
+RESEARCH REPORT:
 
-        Strengths:
-        - ...
-        - ...
-        - ...
+{report}
 
-        Areas to Improve:
-        - ...
-        - ...
-        - ...
 
-        One line verdict:
-        ...
+Review the report now.
 
-        Be strict about factual accuracy and source quality.
-        """
-    )
+Compare every important factual claim in the report
+against the VERIFIED RESEARCH.
+
+Be concise but specific.
+
+Return ONLY the required review format.
+"""
+    ),
 ])
 
-
-# critic chain
 critic_chain = critic_prompt | llm | StrOutputParser()
