@@ -17,7 +17,7 @@ load_dotenv()
 llm = ChatOpenRouter(
     model=os.environ.get(
         "MODEL_NAME",
-        "qwen/qwen3.5-27b",
+        "qwen/qwen3.8-27b:free",
     ),
     temperature=0,
     max_tokens=4096,
