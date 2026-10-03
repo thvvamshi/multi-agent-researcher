@@ -114,6 +114,19 @@ For every source provide:
 
     state["search_results"] = search_result["messages"][-1].content
 
+    if not state["search_results"].strip():
+        raise RuntimeError(
+            "Search Agent returned no research results."
+        )
+
+    if (
+        "http://" not in state["search_results"]
+        and "https://" not in state["search_results"]
+    ):
+        raise RuntimeError(
+            "Search Agent did not return any source URLs."
+        )
+
     print("\nSEARCH RESULTS:\n")
     print(state["search_results"])
 
