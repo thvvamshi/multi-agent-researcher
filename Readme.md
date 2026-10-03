@@ -1,10 +1,12 @@
 # Multi-Agent Researcher
 
-AI-powered multi-agent system for web research, source verification, and report generation.
+AI-powered multi-agent system for web research, source verification, report generation, and critical review.
 
 ## Overview
 
 Multi-Agent Researcher uses specialized AI agents to research a topic, verify web sources, generate a structured report, and critically review the result.
+
+The system separates research responsibilities across multiple agents to improve source quality, factual accuracy, and report reliability.
 
 ## Flow
 
@@ -53,11 +55,11 @@ Multi-Agent Researcher uses specialized AI agents to research a topic, verify we
 
 ## Research Pipeline
 
-1. **Search Agent** — Finds recent and relevant web sources.
-2. **Reader Agent** — Scrapes and verifies selected sources.
+1. **Search Agent** — Finds recent and relevant web sources using Tavily.
+2. **Reader Agent** — Scrapes and verifies selected sources and their claims.
 3. **Writer** — Generates a structured research report using verified information.
 4. **Critic** — Reviews factual quality, source quality, completeness, and unsupported claims.
-5. **Frontend** — Displays the research progress, report, critic review, and sources.
+5. **Frontend** — Displays the research report, critic review, search results, and verified source information.
 
 ## Tech Stack
 
@@ -66,7 +68,8 @@ Multi-Agent Researcher uses specialized AI agents to research a topic, verify we
 - Python
 - FastAPI
 - LangChain
-- Mistral AI
+- OpenRouter
+- Qwen3.5-27B
 - Tavily
 - BeautifulSoup
 
@@ -129,7 +132,8 @@ Create `.env` from `.env.example`:
 
 ```env
 TAVILY_API_KEY=your_tavily_api_key
-MISTRAL_API_KEY=your_mistral_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+MODEL_NAME=qwen/qwen3.5-27b
 ```
 
 ### 3. Setup Frontend
@@ -175,10 +179,11 @@ http://localhost:5173
 1. Open the frontend.
 2. Enter a research question.
 3. Click **Research**.
-4. The system searches and verifies sources.
-5. The Writer generates the research report.
-6. The Critic reviews the report.
-7. View the final report, critic review, and sources.
+4. The Search Agent finds relevant sources.
+5. The Reader Agent scrapes and verifies the selected sources.
+6. The Writer generates the research report.
+7. The Critic reviews the generated report.
+8. View the final report, critic review, search results, and verified sources.
 
 ### Example
 
@@ -191,7 +196,7 @@ What are the latest breakthroughs in quantum computing?
 ### Health Check
 
 ```http
-GET /
+GET /api/health
 ```
 
 ### Research
@@ -231,6 +236,21 @@ Response:
 - AI-powered critic review
 - React-based research interface
 - Markdown report rendering
+- Fail-fast validation when search returns no usable sources
+- OpenRouter-based LLM integration
+- Configurable model through environment variables
+
+## Deployment
+
+The project can be deployed as a single web service.
+
+The FastAPI backend serves the built React frontend in production, while `/api/*` routes handle backend API requests.
+
+Production model configuration:
+
+```env
+MODEL_NAME=qwen/qwen3.5-27b
+```
 
 ## License
 
